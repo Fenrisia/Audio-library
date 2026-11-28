@@ -640,35 +640,44 @@
         </details>
     </div>
 
-    <!-- 记住展开状态的脚本 -->
+    <!-- 记住展开状态的终极脚本（兼容电脑端后退） -->
     <script>
-        // 1. 获取页面上所有的折叠框
+        // 获取页面上所有的折叠框
         const allDetails = document.querySelectorAll('details');
-        
-        // 2. 读取并恢复状态（此时还没绑定监听，不会引发误触保存）
-        try {
-            const savedStates = JSON.parse(sessionStorage.getItem('audioLibraryStates'));
-            if (savedStates && Array.isArray(savedStates)) {
-                allDetails.forEach((detail, index) => {
-                    // 只有记录为 true 的才自动展开
-                    if (savedStates[index] === true) {
-                        detail.open = true; 
-                    }
-                });
+        let isRestoring = false; // 标志位：是否正在恢复状态中
+
+        // 1. 恢复状态的函数
+        function restoreState() {
+            try {
+                const savedStates = JSON.parse(sessionStorage.getItem('audioLibraryStates'));
+                if (savedStates && Array.isArray(savedStates)) {
+                    isRestoring = true; // 开启标志
+                    allDetails.forEach((detail, index) => {
+                        // 强制同步状态
+                        detail.open = savedStates[index] || false;
+                    });
+                    // 稍微延迟 50 毫秒再关闭标志，防止浏览器异步触发 toggle 事件
+                    setTimeout(() => { isRestoring = false; }, 50);
+                }
+            } catch (e) {
+                console.warn('读取展开状态失败', e);
             }
-        } catch (e) {
-            console.warn('读取展开状态失败');
         }
 
-        // 3. 状态恢复完毕后，再绑定监听事件
+        // 2. 无论是初次打开、刷新，还是电脑端点击“后退”从缓存恢复，都会触发 pageshow
+        window.addEventListener('pageshow', restoreState);
+
+        // 3. 监听用户的点击展开/折叠
         allDetails.forEach((detail) => {
             detail.addEventListener('toggle', function() {
-                // 每次用户手动点击，就把当前所有框的展开状态收集起来
+                if (isRestoring) return; // 如果正在恢复状态，千万不要去保存，否则会覆盖正确记录
+                
+                // 收集当前所有框的状态并保存
                 const currentStates = Array.from(allDetails).map(d => d.open);
                 try {
                     sessionStorage.setItem('audioLibraryStates', JSON.stringify(currentStates));
                 } catch (e) {
-                    console.warn('保存展开状态失败');
+                    console.warn('保存展开状态失败', e);
                 }
             });
         });
